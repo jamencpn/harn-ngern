@@ -11,12 +11,10 @@
             font-family: 'Inter', sans-serif;
             background-color: #f3f4f6;
         }
-        /* Style for the larger checkbox */
         .large-checkbox {
             width: 1.25rem; /* 20px */
             height: 1.25rem; /* 20px */
         }
-        /* Style for the confirmation button */
         .confirm-delete-btn {
             animation: fadeInRight 0.3s ease-out;
             position: absolute;
@@ -37,7 +35,6 @@
                 transform: translateX(0);
             }
         }
-        /* Modal styles */
         .modal {
             position: fixed;
             z-index: 50;
@@ -78,20 +75,33 @@
         .modal-close:hover {
             color: #6b7280;
         }
+        #summary-table-container {
+            overflow-x: auto;
+        }
+        /* ⭐ ปรับปรุง CSS สำหรับตารางสรุป */
         .summary-table {
-            width: 100%;
+            width: auto; /* Allow table to grow naturally */
+            min-width: 100%; /* Ensure it fills container */
             border-collapse: collapse;
             margin-top: 16px;
+            table-layout: auto;
         }
         .summary-table th, .summary-table td {
             border: 1px solid #e5e7eb;
-            padding: 12px;
+            padding: 8px; /* Reduce padding for more space */
             text-align: left;
+            font-size: 12px; /* Reduce font size */
         }
         .summary-table th {
             background-color: #f3f4f6;
             font-weight: 600;
             color: #4b5563;
+        }
+        .summary-table th.person-name-header,
+        .summary-table td.person-name-cell {
+            max-width: 120px;
+            white-space: normal;
+            word-break: break-word;
         }
     </style>
 </head>
@@ -145,13 +155,17 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3 class="text-2xl font-bold text-gray-800">สรุปรายการค่าใช้จ่าย</h3>
-                <span class="modal-close" id="close-modal">&times;</span>
+                <div class="flex items-center space-x-2">
+                    <button id="download-summary-btn" class="bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-600 transition duration-300">ดาวน์โหลดรูปภาพ</button>
+                    <span class="modal-close" id="close-modal">&times;</span>
+                </div>
             </div>
             <div id="summary-table-container">
                 </div>
         </div>
     </div>
-
+    
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     <script>
         const peopleContainer = document.getElementById('people-container');
         const personNameInput = document.getElementById('person-name-input');
@@ -167,13 +181,13 @@
         const summaryModal = document.getElementById('summary-modal');
         const closeModalBtn = document.getElementById('close-modal');
         const summaryTableContainer = document.getElementById('summary-table-container');
+        const downloadSummaryBtn = document.getElementById('download-summary-btn');
 
         let people = [];
         let expenses = [];
         let pressTimer;
         let activeConfirmBtn = null;
 
-        // Function to add a person
         function addPerson() {
             const name = personNameInput.value.trim();
             if (name && !people.includes(name)) {
@@ -184,7 +198,6 @@
             }
         }
 
-        // Function to remove a person
         function removePerson(name) {
             people = people.filter(person => person !== name);
             expenses = expenses.map(expense => {
@@ -196,7 +209,6 @@
             calculateExpenses();
         }
 
-        // Function to render the people UI
         function renderPeople() {
             peopleContainer.innerHTML = '';
             people.forEach(person => {
@@ -221,7 +233,6 @@
             });
         }
 
-        // Function to add a new expense item
         function addExpense() {
             if (people.length === 0) {
                 alert('โปรดเพิ่มผู้เข้าร่วมก่อนเพิ่มรายการค่าใช้จ่าย');
@@ -235,7 +246,6 @@
             renderExpenses();
         }
 
-        // Function to render the expenses UI
         function renderExpenses() {
             expensesContainer.innerHTML = '';
             if (people.length === 0) {
@@ -270,23 +280,19 @@
                 expensesContainer.appendChild(expenseItem);
             });
 
-            // Re-attach event listeners after rendering
             attachExpenseItemListeners();
         }
 
-        // Centralized function to attach all event listeners for expense items
         function attachExpenseItemListeners() {
             document.querySelectorAll('.expense-item').forEach(item => {
                 const index = item.dataset.index;
                 const confirmBtn = item.querySelector('.confirm-delete-btn');
 
-                // Clear any existing listeners to prevent duplicates
                 const newItem = item.cloneNode(true);
                 item.parentNode.replaceChild(newItem, item);
                 const itemRef = document.querySelector(`[data-index="${index}"]`);
                 const confirmBtnRef = itemRef.querySelector('.confirm-delete-btn');
 
-                // Event listener for hold-to-delete
                 itemRef.addEventListener('mousedown', (e) => {
                     if (e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL' || e.target.closest('.confirm-delete-btn')) {
                         return;
@@ -310,7 +316,6 @@
                     clearTimeout(pressTimer);
                 });
 
-                // For touch devices
                 itemRef.addEventListener('touchstart', (e) => {
                     if (e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL' || e.target.closest('.confirm-delete-btn')) {
                         return;
@@ -330,14 +335,12 @@
                     clearTimeout(pressTimer);
                 });
 
-                // Event listener for the confirm button itself
                 confirmBtnRef.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const btnIndex = parseInt(e.target.dataset.index);
                     removeExpense(btnIndex);
                 });
 
-                // Event listeners for inputs and checkboxes
                 itemRef.querySelectorAll('.expense-input').forEach(input => {
                     input.addEventListener('input', (e) => {
                         const idx = parseInt(e.target.dataset.index);
@@ -361,7 +364,6 @@
                 });
             });
 
-            // Event listener for clicks outside the expense item to hide confirm buttons
             document.addEventListener('click', (e) => {
                 if (activeConfirmBtn && !e.target.closest('.expense-item')) {
                     activeConfirmBtn.classList.remove('show-confirm-btn');
@@ -370,14 +372,12 @@
             });
         }
 
-        // Function to remove an expense item by index
         function removeExpense(index) {
             expenses.splice(index, 1);
             renderExpenses();
             calculateExpenses();
         }
 
-        // Function to calculate the total expenses
         function calculateExpenses() {
             const totalAmount = parseFloat(totalAmountInput.value) || 0;
             let sumOfListedExpenses = 0;
@@ -423,11 +423,10 @@
             renderResults(totals);
         }
 
-        // Function to render the results
         function renderResults(totals) {
             resultsList.innerHTML = '';
             resultsContainer.classList.remove('hidden');
-            summaryBtn.classList.remove('hidden'); // Show the summary button here
+            summaryBtn.classList.remove('hidden');
 
             for (const person in totals) {
                 const totalCost = totals[person].toFixed(2);
@@ -441,31 +440,24 @@
             }
         }
 
-        // New function to show the summary table
         function showSummaryTable() {
             if (people.length === 0) {
                 alert('โปรดเพิ่มผู้เข้าร่วมก่อน');
                 return;
             }
-            // if (expenses.length === 0) {
-            //     alert('โปรดเพิ่มรายการค่าใช้จ่ายก่อน');
-            //     return;
-            // }
 
-            // Create the table structure
             let tableHTML = `
                 <table class="summary-table">
                     <thead>
                         <tr>
                             <th>รายการ</th>
                             <th>ราคาเต็ม (บาท)</th>
-                            ${people.map(person => `<th>${person}</th>`).join('')}
+                            ${people.map(person => `<th class="person-name-header">${person}</th>`).join('')}
                         </tr>
                     </thead>
                     <tbody>
             `;
 
-            // Calculate per-person costs for each item
             const itemizedCosts = expenses.map(expense => {
                 const price = parseFloat(expense.price) || 0;
                 const perPersonCost = expense.participants.length > 0 ? price / expense.participants.length : 0;
@@ -480,18 +472,16 @@
                 };
             });
             
-            // Add rows for each expense item
             itemizedCosts.forEach(item => {
                 tableHTML += `
                     <tr>
                         <td>${item.item || '-'}</td>
                         <td>${item.price.toFixed(2)}</td>
-                        ${people.map(person => `<td>${item.costs[person].toFixed(2)}</td>`).join('')}
+                        ${people.map(person => `<td class="person-name-cell">${item.costs[person].toFixed(2)}</td>`).join('')}
                     </tr>
                 `;
             });
 
-            // Calculate total row for listed items
             const totalListedCosts = {};
             people.forEach(person => totalListedCosts[person] = 0);
             
@@ -501,12 +491,10 @@
                 });
             });
 
-            // Calculate remaining amount
             const totalAmount = parseFloat(totalAmountInput.value) || 0;
             const sumOfListedExpenses = itemizedCosts.reduce((sum, item) => sum + item.price, 0);
             const remainingAmount = totalAmount - sumOfListedExpenses;
 
-            // Add remaining amount to total
             if (remainingAmount > 0) {
                 const equalSplitAmount = remainingAmount / people.length;
                 tableHTML += `
@@ -518,7 +506,6 @@
                 `;
             }
 
-            // Calculate final total
             const finalTotals = {};
             people.forEach(person => finalTotals[person] = totalListedCosts[person]);
             if (remainingAmount > 0) {
@@ -528,7 +515,6 @@
                 });
             }
 
-            // Add final total row
             tableHTML += `
                 <tr class="font-bold bg-gray-200">
                     <td>ยอดรวมที่ต้องจ่าย</td>
@@ -545,12 +531,56 @@
             summaryTableContainer.innerHTML = tableHTML;
             summaryModal.style.display = 'flex';
         }
+        
+        // ⭐ ฟังก์ชันดาวน์โหลดที่ปรับปรุงใหม่
+        function downloadSummaryImage() {
+            const summaryTableContainer = document.getElementById('summary-table-container');
 
-        // Initial render and event listeners
+            if (!summaryTableContainer || summaryTableContainer.innerHTML.trim() === '') {
+                alert('ไม่พบข้อมูลตารางที่จะดาวน์โหลด');
+                return;
+            }
+
+            // ⭐ ส่วนการแก้ปัญหาหลัก: ทำให้ overflow เป็น visible ชั่วคราว
+            const originalOverflowX = summaryTableContainer.style.overflowX;
+            summaryTableContainer.style.overflowX = 'visible';
+            
+            const tableElement = summaryTableContainer.querySelector('.summary-table');
+            const actualWidth = tableElement.scrollWidth;
+            
+            // ใช้ความกว้างที่แท้จริงของตาราง + ค่าเผื่อ
+            const targetWidth = actualWidth + 50; 
+            const scale = 2;
+
+            html2canvas(summaryTableContainer, {
+                scale: scale,
+                width: targetWidth,
+                logging: false,
+                useCORS: true
+            }).then(canvas => {
+                const imageDataUrl = canvas.toDataURL('image/png');
+                const a = document.createElement('a');
+                a.href = imageDataUrl;
+                a.download = 'summary_report.png';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                // ⭐ คืนค่า overflowX กลับเป็นค่าเดิม
+                summaryTableContainer.style.overflowX = originalOverflowX;
+
+            }).catch(error => {
+                console.error('Failed to capture and download image:', error);
+                alert('เกิดข้อผิดพลาดในการดาวน์โหลดรูปภาพ โปรดลองอีกครั้ง');
+                // ⭐ คืนค่า overflowX กลับเป็นค่าเดิม แม้จะมี error
+                summaryTableContainer.style.overflowX = originalOverflowX;
+            });
+        }
+
+        // Event listeners
         renderPeople();
         renderExpenses();
 
-        // totalAmountInput.addEventListener('input', calculateExpenses); <-- This line was removed
         addPersonBtn.addEventListener('click', addPerson);
         personNameInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -559,9 +589,9 @@
         });
         addExpenseBtn.addEventListener('click', addExpense);
         calculateBtn.addEventListener('click', calculateExpenses);
-        summaryBtn.addEventListener('click', showSummaryTable); // New event listener for the summary button
+        summaryBtn.addEventListener('click', showSummaryTable);
+        downloadSummaryBtn.addEventListener('click', downloadSummaryImage);
 
-        // Event listener to close the modal
         closeModalBtn.addEventListener('click', () => {
             summaryModal.style.display = 'none';
         });

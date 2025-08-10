@@ -37,6 +37,62 @@
                 transform: translateX(0);
             }
         }
+        /* Modal styles */
+        .modal {
+            position: fixed;
+            z-index: 50;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.4);
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: #fff;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            width: 90%;
+            max-width: 768px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        .modal-header {
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 16px;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-close {
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            color: #9ca3af;
+        }
+        .modal-close:hover {
+            color: #6b7280;
+        }
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+        .summary-table th, .summary-table td {
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            text-align: left;
+        }
+        .summary-table th {
+            background-color: #f3f4f6;
+            font-weight: 600;
+            color: #4b5563;
+        }
     </style>
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
@@ -80,7 +136,19 @@
                 <h2 class="text-xl font-semibold text-gray-700 border-b pb-1 border-gray-200 mb-3">สรุปยอดที่ต้องจ่าย</h2>
                 <div id="results-list" class="space-y-2">
                     </div>
+                <button id="summary-btn" class="w-full bg-gray-500 text-white font-bold text-base py-3 rounded-lg shadow-lg hover:bg-gray-600 transition duration-300 mt-4 hidden">สรุปรายการทั้งหมด</button>
             </div>
+        </div>
+    </div>
+
+    <div id="summary-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="text-2xl font-bold text-gray-800">สรุปรายการค่าใช้จ่าย</h3>
+                <span class="modal-close" id="close-modal">&times;</span>
+            </div>
+            <div id="summary-table-container">
+                </div>
         </div>
     </div>
 
@@ -95,6 +163,10 @@
         const resultsList = document.getElementById('results-list');
         const totalAmountInput = document.getElementById('total-amount-input');
         const errorMessage = document.getElementById('error-message');
+        const summaryBtn = document.getElementById('summary-btn');
+        const summaryModal = document.getElementById('summary-modal');
+        const closeModalBtn = document.getElementById('close-modal');
+        const summaryTableContainer = document.getElementById('summary-table-container');
 
         let people = [];
         let expenses = [];
@@ -355,6 +427,7 @@
         function renderResults(totals) {
             resultsList.innerHTML = '';
             resultsContainer.classList.remove('hidden');
+            summaryBtn.classList.remove('hidden'); // Show the summary button here
 
             for (const person in totals) {
                 const totalCost = totals[person].toFixed(2);
@@ -368,11 +441,116 @@
             }
         }
 
+        // New function to show the summary table
+        function showSummaryTable() {
+            if (people.length === 0) {
+                alert('โปรดเพิ่มผู้เข้าร่วมก่อน');
+                return;
+            }
+            // if (expenses.length === 0) {
+            //     alert('โปรดเพิ่มรายการค่าใช้จ่ายก่อน');
+            //     return;
+            // }
+
+            // Create the table structure
+            let tableHTML = `
+                <table class="summary-table">
+                    <thead>
+                        <tr>
+                            <th>รายการ</th>
+                            <th>ราคาเต็ม (บาท)</th>
+                            ${people.map(person => `<th>${person}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            // Calculate per-person costs for each item
+            const itemizedCosts = expenses.map(expense => {
+                const price = parseFloat(expense.price) || 0;
+                const perPersonCost = expense.participants.length > 0 ? price / expense.participants.length : 0;
+                const costs = {};
+                people.forEach(person => {
+                    costs[person] = expense.participants.includes(person) ? perPersonCost : 0;
+                });
+                return {
+                    item: expense.item,
+                    price: price,
+                    costs
+                };
+            });
+            
+            // Add rows for each expense item
+            itemizedCosts.forEach(item => {
+                tableHTML += `
+                    <tr>
+                        <td>${item.item || '-'}</td>
+                        <td>${item.price.toFixed(2)}</td>
+                        ${people.map(person => `<td>${item.costs[person].toFixed(2)}</td>`).join('')}
+                    </tr>
+                `;
+            });
+
+            // Calculate total row for listed items
+            const totalListedCosts = {};
+            people.forEach(person => totalListedCosts[person] = 0);
+            
+            itemizedCosts.forEach(item => {
+                people.forEach(person => {
+                    totalListedCosts[person] += item.costs[person];
+                });
+            });
+
+            // Calculate remaining amount
+            const totalAmount = parseFloat(totalAmountInput.value) || 0;
+            const sumOfListedExpenses = itemizedCosts.reduce((sum, item) => sum + item.price, 0);
+            const remainingAmount = totalAmount - sumOfListedExpenses;
+
+            // Add remaining amount to total
+            if (remainingAmount > 0) {
+                const equalSplitAmount = remainingAmount / people.length;
+                tableHTML += `
+                    <tr class="bg-gray-100">
+                        <td class="font-semibold text-gray-700">ส่วนที่หารเท่ากัน</td>
+                        <td>${remainingAmount.toFixed(2)}</td>
+                        ${people.map(person => `<td>${equalSplitAmount.toFixed(2)}</td>`).join('')}
+                    </tr>
+                `;
+            }
+
+            // Calculate final total
+            const finalTotals = {};
+            people.forEach(person => finalTotals[person] = totalListedCosts[person]);
+            if (remainingAmount > 0) {
+                const equalSplitAmount = remainingAmount / people.length;
+                people.forEach(person => {
+                    finalTotals[person] += equalSplitAmount;
+                });
+            }
+
+            // Add final total row
+            tableHTML += `
+                <tr class="font-bold bg-gray-200">
+                    <td>ยอดรวมที่ต้องจ่าย</td>
+                    <td>${totalAmount.toFixed(2)}</td>
+                    ${people.map(person => `<td>${finalTotals[person].toFixed(2)}</td>`).join('')}
+                </tr>
+            `;
+
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
+            
+            summaryTableContainer.innerHTML = tableHTML;
+            summaryModal.style.display = 'flex';
+        }
+
         // Initial render and event listeners
         renderPeople();
         renderExpenses();
 
-        totalAmountInput.addEventListener('input', calculateExpenses);
+        // totalAmountInput.addEventListener('input', calculateExpenses); <-- This line was removed
         addPersonBtn.addEventListener('click', addPerson);
         personNameInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -381,6 +559,17 @@
         });
         addExpenseBtn.addEventListener('click', addExpense);
         calculateBtn.addEventListener('click', calculateExpenses);
+        summaryBtn.addEventListener('click', showSummaryTable); // New event listener for the summary button
+
+        // Event listener to close the modal
+        closeModalBtn.addEventListener('click', () => {
+            summaryModal.style.display = 'none';
+        });
+        window.addEventListener('click', (e) => {
+            if (e.target === summaryModal) {
+                summaryModal.style.display = 'none';
+            }
+        });
     </script>
 </body>
 </html>

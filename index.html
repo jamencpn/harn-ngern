@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>โปรแกรมคำนวณค่าใช้จ่ายหารบิล</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Style for the larger checkbox */
+        .large-checkbox {
+            width: 1.25rem; /* 20px */
+            height: 1.25rem; /* 20px */
+        }
+        /* Style for the confirmation button */
+        .confirm-delete-btn {
+            animation: fadeInRight 0.3s ease-out;
+            position: absolute;
+            right: 1rem;
+            bottom: 0.5rem;
+            display: none; /* Initially hidden */
+        }
+        .show-confirm-btn {
+            display: block;
+        }
+        @keyframes fadeInRight {
+            from {
+                opacity: 0;
+                transform: translateX(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-6 rounded-2xl shadow-xl w-full max-w-lg space-y-6">
+        <h1 class="text-2xl font-bold text-center text-gray-800">โปรแกรมคำนวณค่าใช้จ่ายหารบิล</h1>
+
+        <div class="space-y-3">
+            <h2 class="text-xl font-semibold text-gray-700 border-b pb-1 border-gray-200">ยอดรวมทั้งหมด (Total Bill)</h2>
+            <input type="number" id="total-amount-input" placeholder="ใส่ยอดเงินที่จ่ายไปทั้งหมด (เช่น ค่าอาหารทั้งหมด)" class="w-full p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-gray-700 text-base">
+            <div id="error-message" class="text-red-500 text-sm hidden text-center font-medium"></div>
+        </div>
+
+        <div class="space-y-3">
+            <h2 class="text-xl font-semibold text-gray-700 border-b pb-1 border-gray-200">สมาชิก (Members)</h2>
+            <div id="people-container" class="flex flex-wrap gap-2">
+                </div>
+            <div class="flex space-x-2">
+                <input type="text" id="person-name-input" placeholder="ใส่ชื่อ" class="flex-grow p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-gray-700">
+                <button id="add-person-btn" class="bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-600 transition duration-300 shadow-md">เพิ่มคน</button>
+            </div>
+        </div>
+
+        <div class="space-y-3">
+            <h2 class="text-xl font-semibold text-gray-700 border-b pb-1 border-gray-200">รายการย่อยเฉพาะกลุ่ม (Optional Shared Items)</h2>
+            
+            <div class="hidden md:grid grid-cols-12 gap-2 font-semibold text-gray-600 text-sm mb-1">
+                <div class="col-span-4 px-2">รายการ</div>
+                <div class="col-span-3 px-2">ราคา (บาท)</div>
+                <div class="col-span-5 px-2">ผู้จ่าย</div>
+            </div>
+
+            <div id="expenses-container" class="space-y-2">
+                </div>
+            <button id="add-expense-btn" class="w-full bg-green-500 text-white font-bold py-2 rounded-lg shadow-md hover:bg-green-600 transition duration-300">เพิ่มรายการค่าใช้จ่าย</button>
+        </div>
+
+        <div class="space-y-4">
+            <button id="calculate-btn" class="w-full bg-purple-600 text-white font-bold text-base py-3 rounded-lg shadow-lg hover:bg-purple-700 transition duration-300">คำนวณ</button>
+            
+            <div id="results-container" class="bg-gray-50 p-4 rounded-xl shadow-inner hidden">
+                <h2 class="text-xl font-semibold text-gray-700 border-b pb-1 border-gray-200 mb-3">สรุปยอดที่ต้องจ่าย</h2>
+                <div id="results-list" class="space-y-2">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const peopleContainer = document.getElementById('people-container');
+        const personNameInput = document.getElementById('person-name-input');
+        const addPersonBtn = document.getElementById('add-person-btn');
+        const expensesContainer = document.getElementById('expenses-container');
+        const addExpenseBtn = document.getElementById('add-expense-btn');
+        const calculateBtn = document.getElementById('calculate-btn');
+        const resultsContainer = document.getElementById('results-container');
+        const resultsList = document.getElementById('results-list');
+        const totalAmountInput = document.getElementById('total-amount-input');
+        const errorMessage = document.getElementById('error-message');
+
+        let people = [];
+        let expenses = [];
+        let pressTimer;
+        let activeConfirmBtn = null;
+
+        // Function to add a person
+        function addPerson() {
+            const name = personNameInput.value.trim();
+            if (name && !people.includes(name)) {
+                people.push(name);
+                personNameInput.value = '';
+                renderPeople();
+                renderExpenses();
+            }
+        }
+
+        // Function to remove a person
+        function removePerson(name) {
+            people = people.filter(person => person !== name);
+            expenses = expenses.map(expense => {
+                expense.participants = expense.participants.filter(p => p !== name);
+                return expense;
+            });
+            renderPeople();
+            renderExpenses();
+            calculateExpenses();
+        }
+
+        // Function to render the people UI
+        function renderPeople() {
+            peopleContainer.innerHTML = '';
+            people.forEach(person => {
+                const personTag = document.createElement('span');
+                personTag.className = 'flex items-center space-x-1 bg-indigo-100 text-indigo-800 text-xs font-medium px-3 py-1 rounded-full shadow-sm';
+                personTag.innerHTML = `
+                    <span class="truncate">${person}</span>
+                    <button class="remove-person-btn text-indigo-500 hover:text-indigo-700 transition duration-300 focus:outline-none" data-name="${person}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                `;
+                peopleContainer.appendChild(personTag);
+            });
+
+            document.querySelectorAll('.remove-person-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const name = e.currentTarget.dataset.name;
+                    removePerson(name);
+                });
+            });
+        }
+
+        // Function to add a new expense item
+        function addExpense() {
+            if (people.length === 0) {
+                alert('โปรดเพิ่มผู้เข้าร่วมก่อนเพิ่มรายการค่าใช้จ่าย');
+                return;
+            }
+            expenses.push({
+                item: '',
+                price: '',
+                participants: people.slice()
+            });
+            renderExpenses();
+        }
+
+        // Function to render the expenses UI
+        function renderExpenses() {
+            expensesContainer.innerHTML = '';
+            if (people.length === 0) {
+                 expensesContainer.innerHTML = `<div class="text-center text-gray-500 py-4 text-sm">โปรดเพิ่มผู้เข้าร่วมก่อน</div>`;
+                 return;
+            }
+            expenses.forEach((expense, index) => {
+                const expenseItem = document.createElement('div');
+                expenseItem.className = 'expense-item grid grid-cols-12 md:grid-cols-12 gap-2 p-2 bg-gray-50 rounded-xl shadow-sm border border-gray-200 hover:bg-gray-100 transition duration-300 relative cursor-pointer';
+                expenseItem.setAttribute('data-index', index);
+                
+                expenseItem.innerHTML = `
+                    <div class="col-span-12 md:col-span-4">
+                        <input type="text" placeholder="รายการ" value="${expense.item}" data-index="${index}" data-field="item" class="expense-input w-full p-1.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm">
+                    </div>
+                    <div class="col-span-12 md:col-span-3">
+                        <input type="number" placeholder="ราคา" value="${expense.price}" data-index="${index}" data-field="price" class="expense-input w-full p-1.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm">
+                    </div>
+                    <div class="col-span-12 md:col-span-5">
+                        <div class="md:hidden font-medium text-xs text-gray-600 mb-1">ผู้จ่าย:</div>
+                        <div class="flex flex-wrap gap-1.5 items-center">
+                            ${people.map(person => `
+                                <label class="flex items-center space-x-1 cursor-pointer">
+                                    <input type="checkbox" data-index="${index}" data-person="${person}" class="participant-checkbox rounded text-purple-600 focus:ring-purple-500 large-checkbox" ${expense.participants.includes(person) ? 'checked' : ''}>
+                                    <span class="text-xs text-gray-700">${person}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <button class="confirm-delete-btn bg-red-500 text-white font-bold py-1 px-2 rounded-md shadow-md text-sm" data-index="${index}">ยืนยัน</button>
+                `;
+                expensesContainer.appendChild(expenseItem);
+            });
+
+            // Re-attach event listeners after rendering
+            attachExpenseItemListeners();
+        }
+
+        // Centralized function to attach all event listeners for expense items
+        function attachExpenseItemListeners() {
+            document.querySelectorAll('.expense-item').forEach(item => {
+                const index = item.dataset.index;
+                const confirmBtn = item.querySelector('.confirm-delete-btn');
+
+                // Clear any existing listeners to prevent duplicates
+                const newItem = item.cloneNode(true);
+                item.parentNode.replaceChild(newItem, item);
+                const itemRef = document.querySelector(`[data-index="${index}"]`);
+                const confirmBtnRef = itemRef.querySelector('.confirm-delete-btn');
+
+                // Event listener for hold-to-delete
+                itemRef.addEventListener('mousedown', (e) => {
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL' || e.target.closest('.confirm-delete-btn')) {
+                        return;
+                    }
+                    e.preventDefault();
+                    clearTimeout(pressTimer);
+                    if (activeConfirmBtn && activeConfirmBtn !== confirmBtnRef) {
+                        activeConfirmBtn.classList.remove('show-confirm-btn');
+                    }
+                    pressTimer = setTimeout(() => {
+                        confirmBtnRef.classList.add('show-confirm-btn');
+                        activeConfirmBtn = confirmBtnRef;
+                    }, 500);
+                });
+
+                itemRef.addEventListener('mouseup', () => {
+                    clearTimeout(pressTimer);
+                });
+
+                itemRef.addEventListener('mouseleave', () => {
+                    clearTimeout(pressTimer);
+                });
+
+                // For touch devices
+                itemRef.addEventListener('touchstart', (e) => {
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL' || e.target.closest('.confirm-delete-btn')) {
+                        return;
+                    }
+                    e.preventDefault();
+                    clearTimeout(pressTimer);
+                    if (activeConfirmBtn && activeConfirmBtn !== confirmBtnRef) {
+                        activeConfirmBtn.classList.remove('show-confirm-btn');
+                    }
+                    pressTimer = setTimeout(() => {
+                        confirmBtnRef.classList.add('show-confirm-btn');
+                        activeConfirmBtn = confirmBtnRef;
+                    }, 500);
+                });
+
+                itemRef.addEventListener('touchend', () => {
+                    clearTimeout(pressTimer);
+                });
+
+                // Event listener for the confirm button itself
+                confirmBtnRef.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const btnIndex = parseInt(e.target.dataset.index);
+                    removeExpense(btnIndex);
+                });
+
+                // Event listeners for inputs and checkboxes
+                itemRef.querySelectorAll('.expense-input').forEach(input => {
+                    input.addEventListener('input', (e) => {
+                        const idx = parseInt(e.target.dataset.index);
+                        const field = e.target.dataset.field;
+                        expenses[idx][field] = e.target.value;
+                    });
+                });
+
+                itemRef.querySelectorAll('.participant-checkbox').forEach(checkbox => {
+                    checkbox.addEventListener('change', (e) => {
+                        const idx = parseInt(e.target.dataset.index);
+                        const person = e.target.dataset.person;
+                        if (e.target.checked) {
+                            if (!expenses[idx].participants.includes(person)) {
+                                expenses[idx].participants.push(person);
+                            }
+                        } else {
+                            expenses[idx].participants = expenses[idx].participants.filter(p => p !== person);
+                        }
+                    });
+                });
+            });
+
+            // Event listener for clicks outside the expense item to hide confirm buttons
+            document.addEventListener('click', (e) => {
+                if (activeConfirmBtn && !e.target.closest('.expense-item')) {
+                    activeConfirmBtn.classList.remove('show-confirm-btn');
+                    activeConfirmBtn = null;
+                }
+            });
+        }
+
+        // Function to remove an expense item by index
+        function removeExpense(index) {
+            expenses.splice(index, 1);
+            renderExpenses();
+            calculateExpenses();
+        }
+
+        // Function to calculate the total expenses
+        function calculateExpenses() {
+            const totalAmount = parseFloat(totalAmountInput.value) || 0;
+            let sumOfListedExpenses = 0;
+            expenses.forEach(expense => {
+                const price = parseFloat(expense.price) || 0;
+                sumOfListedExpenses += price;
+            });
+            
+            if (sumOfListedExpenses > totalAmount) {
+                errorMessage.textContent = 'ยอดรวมรายการย่อยเกินยอดรวมทั้งหมด กรุณาแก้ไข';
+                errorMessage.classList.remove('hidden');
+                resultsContainer.classList.add('hidden');
+                return;
+            } else {
+                errorMessage.classList.add('hidden');
+            }
+
+            const totals = {};
+            people.forEach(person => totals[person] = 0);
+
+            let remainingAmount = totalAmount - sumOfListedExpenses;
+            let equalSplitAmount = 0;
+            if (people.length > 0 && remainingAmount > 0) {
+                equalSplitAmount = remainingAmount / people.length;
+            }
+
+            people.forEach(person => {
+                totals[person] += equalSplitAmount;
+            });
+
+            expenses.forEach(expense => {
+                const price = parseFloat(expense.price) || 0;
+                if (price > 0 && expense.participants.length > 0) {
+                    const pricePerPerson = price / expense.participants.length;
+                    expense.participants.forEach(person => {
+                        if (totals[person] !== undefined) {
+                            totals[person] += pricePerPerson;
+                        }
+                    });
+                }
+            });
+
+            renderResults(totals);
+        }
+
+        // Function to render the results
+        function renderResults(totals) {
+            resultsList.innerHTML = '';
+            resultsContainer.classList.remove('hidden');
+
+            for (const person in totals) {
+                const totalCost = totals[person].toFixed(2);
+                const resultItem = document.createElement('div');
+                resultItem.className = 'flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-200';
+                resultItem.innerHTML = `
+                    <span class="text-base font-medium text-gray-800">${person}</span>
+                    <span class="text-lg font-bold text-purple-600">${totalCost} บาท</span>
+                `;
+                resultsList.appendChild(resultItem);
+            }
+        }
+
+        // Initial render and event listeners
+        renderPeople();
+        renderExpenses();
+
+        totalAmountInput.addEventListener('input', calculateExpenses);
+        addPersonBtn.addEventListener('click', addPerson);
+        personNameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addPerson();
+            }
+        });
+        addExpenseBtn.addEventListener('click', addExpense);
+        calculateBtn.addEventListener('click', calculateExpenses);
+    </script>
+</body>
+</html>

@@ -15,15 +15,25 @@
             width: 1.25rem; /* 20px */
             height: 1.25rem; /* 20px */
         }
-        .confirm-delete-btn {
+        .confirm-delete-btn, .confirm-add-ratio-btn {
             animation: fadeInRight 0.3s ease-out;
             position: absolute;
-            right: 1rem;
             bottom: 0.5rem;
-            display: none; /* Initially hidden */
+            height: 2.5rem;
+            width: 2.5rem;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.5rem;
+        }
+        .confirm-delete-btn {
+            right: 1rem;
+        }
+        .confirm-add-ratio-btn {
+            right: 4rem;
         }
         .show-confirm-btn {
-            display: block;
+            display: flex;
         }
         @keyframes fadeInRight {
             from {
@@ -78,19 +88,18 @@
         #summary-table-container {
             overflow-x: auto;
         }
-        /* ⭐ ปรับปรุง CSS สำหรับตารางสรุป */
         .summary-table {
-            width: auto; /* Allow table to grow naturally */
-            min-width: 100%; /* Ensure it fills container */
+            width: auto;
+            min-width: 100%;
             border-collapse: collapse;
             margin-top: 16px;
             table-layout: auto;
         }
         .summary-table th, .summary-table td {
             border: 1px solid #e5e7eb;
-            padding: 8px; /* Reduce padding for more space */
+            padding: 8px;
             text-align: left;
-            font-size: 12px; /* Reduce font size */
+            font-size: 12px;
         }
         .summary-table th {
             background-color: #f3f4f6;
@@ -102,6 +111,21 @@
             max-width: 120px;
             white-space: normal;
             word-break: break-word;
+        }
+        .ratio-input-container {
+            display: none;
+            animation: fadeIn 0.3s ease-out;
+        }
+        .show-ratio-input {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
         }
     </style>
 </head>
@@ -131,7 +155,7 @@
             <div class="hidden md:grid grid-cols-12 gap-2 font-semibold text-gray-600 text-sm mb-1">
                 <div class="col-span-4 px-2">รายการ</div>
                 <div class="col-span-3 px-2">ราคา (บาท)</div>
-                <div class="col-span-5 px-2">ผู้จ่าย</div>
+                <div class="col-span-5 px-2">ผู้จ่าย (และอัตราส่วน)</div>
             </div>
 
             <div id="expenses-container" class="space-y-2">
@@ -186,7 +210,7 @@
         let people = [];
         let expenses = [];
         let pressTimer;
-        let activeConfirmBtn = null;
+        let activeConfirmBtns = [];
 
         function addPerson() {
             const name = personNameInput.value.trim();
@@ -194,6 +218,9 @@
                 people.push(name);
                 personNameInput.value = '';
                 renderPeople();
+                expenses.forEach(expense => {
+                    expense.ratios[name] = 1;
+                });
                 renderExpenses();
             }
         }
@@ -201,7 +228,7 @@
         function removePerson(name) {
             people = people.filter(person => person !== name);
             expenses = expenses.map(expense => {
-                expense.participants = expense.participants.filter(p => p !== name);
+                delete expense.ratios[name];
                 return expense;
             });
             renderPeople();
@@ -238,10 +265,14 @@
                 alert('โปรดเพิ่มผู้เข้าร่วมก่อนเพิ่มรายการค่าใช้จ่าย');
                 return;
             }
+            const newRatios = {};
+            people.forEach(person => newRatios[person] = 1);
+
             expenses.push({
                 item: '',
                 price: '',
-                participants: people.slice()
+                ratios: newRatios,
+                showRatioInputs: false
             });
             renderExpenses();
         }
@@ -249,13 +280,16 @@
         function renderExpenses() {
             expensesContainer.innerHTML = '';
             if (people.length === 0) {
-                 expensesContainer.innerHTML = `<div class="text-center text-gray-500 py-4 text-sm">โปรดเพิ่มผู้เข้าร่วมก่อน</div>`;
-                 return;
+                expensesContainer.innerHTML = `<div class="text-center text-gray-500 py-4 text-sm">โปรดเพิ่มผู้เข้าร่วมก่อน</div>`;
+                return;
             }
+
             expenses.forEach((expense, index) => {
                 const expenseItem = document.createElement('div');
                 expenseItem.className = 'expense-item grid grid-cols-12 md:grid-cols-12 gap-2 p-2 bg-gray-50 rounded-xl shadow-sm border border-gray-200 hover:bg-gray-100 transition duration-300 relative cursor-pointer';
                 expenseItem.setAttribute('data-index', index);
+                
+                const ratioInputsVisibleClass = expense.showRatioInputs ? 'show-ratio-input' : '';
                 
                 expenseItem.innerHTML = `
                     <div class="col-span-12 md:col-span-4">
@@ -265,17 +299,32 @@
                         <input type="number" placeholder="ราคา" value="${expense.price}" data-index="${index}" data-field="price" class="expense-input w-full p-1.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm">
                     </div>
                     <div class="col-span-12 md:col-span-5">
-                        <div class="md:hidden font-medium text-xs text-gray-600 mb-1">ผู้จ่าย:</div>
                         <div class="flex flex-wrap gap-1.5 items-center">
                             ${people.map(person => `
-                                <label class="flex items-center space-x-1 cursor-pointer">
-                                    <input type="checkbox" data-index="${index}" data-person="${person}" class="participant-checkbox rounded text-purple-600 focus:ring-purple-500 large-checkbox" ${expense.participants.includes(person) ? 'checked' : ''}>
-                                    <span class="text-xs text-gray-700">${person}</span>
-                                </label>
+                                <div class="flex items-center space-x-1.5">
+                                    <label class="flex items-center space-x-1 cursor-pointer">
+                                        <input type="checkbox" data-index="${index}" data-person="${person}" class="participant-checkbox rounded text-purple-600 focus:ring-purple-500 large-checkbox" ${expense.ratios[person] > 0 ? 'checked' : ''}>
+                                        <span class="text-xs text-gray-700">${person}</span>
+                                    </label>
+                                    <div class="ratio-input-container ${ratioInputsVisibleClass}">
+                                        <input type="number" data-index="${index}" data-person="${person}" data-field="ratio" class="ratio-input w-12 p-1 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-purple-500 text-xs text-center" value="${expense.ratios[person]}" min="0" ${expense.ratios[person] === 0 ? 'disabled' : ''}>
+                                    </div>
+                                </div>
                             `).join('')}
                         </div>
                     </div>
-                    <button class="confirm-delete-btn bg-red-500 text-white font-bold py-1 px-2 rounded-md shadow-md text-sm" data-index="${index}">ยืนยัน</button>
+                    <button class="confirm-add-ratio-btn bg-green-500 text-white font-bold py-1 px-2 rounded-md shadow-md text-sm" data-index="${index}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="19" y1="5" x2="5" y2="19"></line>
+                            <circle cx="6.5" cy="6.5" r="2.5"></circle>
+                            <circle cx="17.5" cy="17.5" r="2.5"></circle>
+                        </svg>
+                    </button>
+                    <button class="confirm-delete-btn bg-red-500 text-white font-bold py-1 px-2 rounded-md shadow-md text-sm" data-index="${index}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </button>
                 `;
                 expensesContainer.appendChild(expenseItem);
             });
@@ -286,62 +335,64 @@
         function attachExpenseItemListeners() {
             document.querySelectorAll('.expense-item').forEach(item => {
                 const index = item.dataset.index;
-                const confirmBtn = item.querySelector('.confirm-delete-btn');
+                const deleteBtn = item.querySelector('.confirm-delete-btn');
+                const addRatioBtn = item.querySelector('.confirm-add-ratio-btn');
+                
+                ['mousedown', 'touchstart'].forEach(event => {
+                    item.addEventListener(event, (e) => {
+                        if (e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL' || e.target.closest('button')) {
+                            return;
+                        }
+                        e.preventDefault();
+                        clearTimeout(pressTimer);
+                        
+                        activeConfirmBtns.forEach(btn => btn.classList.remove('show-confirm-btn'));
+                        activeConfirmBtns = [];
 
-                const newItem = item.cloneNode(true);
-                item.parentNode.replaceChild(newItem, item);
-                const itemRef = document.querySelector(`[data-index="${index}"]`);
-                const confirmBtnRef = itemRef.querySelector('.confirm-delete-btn');
-
-                itemRef.addEventListener('mousedown', (e) => {
-                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL' || e.target.closest('.confirm-delete-btn')) {
-                        return;
-                    }
-                    e.preventDefault();
-                    clearTimeout(pressTimer);
-                    if (activeConfirmBtn && activeConfirmBtn !== confirmBtnRef) {
-                        activeConfirmBtn.classList.remove('show-confirm-btn');
-                    }
-                    pressTimer = setTimeout(() => {
-                        confirmBtnRef.classList.add('show-confirm-btn');
-                        activeConfirmBtn = confirmBtnRef;
-                    }, 500);
+                        pressTimer = setTimeout(() => {
+                            deleteBtn.classList.add('show-confirm-btn');
+                            addRatioBtn.classList.add('show-confirm-btn');
+                            activeConfirmBtns.push(deleteBtn, addRatioBtn);
+                        }, 500);
+                    });
                 });
 
-                itemRef.addEventListener('mouseup', () => {
-                    clearTimeout(pressTimer);
+                ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(event => {
+                    item.addEventListener(event, () => {
+                        clearTimeout(pressTimer);
+                    });
                 });
 
-                itemRef.addEventListener('mouseleave', () => {
-                    clearTimeout(pressTimer);
-                });
-
-                itemRef.addEventListener('touchstart', (e) => {
-                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL' || e.target.closest('.confirm-delete-btn')) {
-                        return;
-                    }
-                    e.preventDefault();
-                    clearTimeout(pressTimer);
-                    if (activeConfirmBtn && activeConfirmBtn !== confirmBtnRef) {
-                        activeConfirmBtn.classList.remove('show-confirm-btn');
-                    }
-                    pressTimer = setTimeout(() => {
-                        confirmBtnRef.classList.add('show-confirm-btn');
-                        activeConfirmBtn = confirmBtnRef;
-                    }, 500);
-                });
-
-                itemRef.addEventListener('touchend', () => {
-                    clearTimeout(pressTimer);
-                });
-
-                confirmBtnRef.addEventListener('click', (e) => {
+                deleteBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const btnIndex = parseInt(e.target.dataset.index);
+                    const btnIndex = parseInt(e.currentTarget.dataset.index);
                     removeExpense(btnIndex);
                 });
+                
+                addRatioBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const idx = parseInt(e.currentTarget.dataset.index);
+                    const expense = expenses[idx];
+                    
+                    // Toggle visibility of ratio inputs
+                    expense.showRatioInputs = !expense.showRatioInputs;
 
-                itemRef.querySelectorAll('.expense-input').forEach(input => {
+                    // If ratio inputs are now hidden, reset ratios to 1 for checked people
+                    if (!expense.showRatioInputs) {
+                        people.forEach(person => {
+                            if (expense.ratios[person] > 0) { // Check if person is selected
+                                expense.ratios[person] = 1;
+                            } else {
+                                expense.ratios[person] = 0;
+                            }
+                        });
+                    }
+                    
+                    renderExpenses();
+                });
+                
+
+                item.querySelectorAll('.expense-input').forEach(input => {
                     input.addEventListener('input', (e) => {
                         const idx = parseInt(e.target.dataset.index);
                         const field = e.target.dataset.field;
@@ -349,25 +400,44 @@
                     });
                 });
 
-                itemRef.querySelectorAll('.participant-checkbox').forEach(checkbox => {
+                item.querySelectorAll('.participant-checkbox').forEach(checkbox => {
                     checkbox.addEventListener('change', (e) => {
                         const idx = parseInt(e.target.dataset.index);
                         const person = e.target.dataset.person;
+                        const ratioInput = item.querySelector(`.ratio-input[data-person="${person}"]`);
+                        
                         if (e.target.checked) {
-                            if (!expenses[idx].participants.includes(person)) {
-                                expenses[idx].participants.push(person);
+                            if (expenses[idx].ratios[person] === 0) {
+                                expenses[idx].ratios[person] = 1;
                             }
+                            ratioInput.disabled = false;
+                            ratioInput.value = expenses[idx].ratios[person];
                         } else {
-                            expenses[idx].participants = expenses[idx].participants.filter(p => p !== person);
+                            expenses[idx].ratios[person] = 0;
+                            ratioInput.disabled = true;
+                            ratioInput.value = 0;
                         }
+                    });
+                });
+
+                item.querySelectorAll('.ratio-input').forEach(input => {
+                    input.addEventListener('input', (e) => {
+                        const idx = parseInt(e.target.dataset.index);
+                        const person = e.target.dataset.person;
+                        let ratio = parseInt(e.target.value) || 0;
+                        if (ratio < 0) {
+                            ratio = 0;
+                            e.target.value = 0;
+                        }
+                        expenses[idx].ratios[person] = ratio;
                     });
                 });
             });
 
             document.addEventListener('click', (e) => {
-                if (activeConfirmBtn && !e.target.closest('.expense-item')) {
-                    activeConfirmBtn.classList.remove('show-confirm-btn');
-                    activeConfirmBtn = null;
+                if (activeConfirmBtns.length > 0 && !e.target.closest('.expense-item')) {
+                    activeConfirmBtns.forEach(btn => btn.classList.remove('show-confirm-btn'));
+                    activeConfirmBtns = [];
                 }
             });
         }
@@ -381,9 +451,26 @@
         function calculateExpenses() {
             const totalAmount = parseFloat(totalAmountInput.value) || 0;
             let sumOfListedExpenses = 0;
+            const totals = {};
+            people.forEach(person => totals[person] = 0);
+
             expenses.forEach(expense => {
                 const price = parseFloat(expense.price) || 0;
                 sumOfListedExpenses += price;
+                
+                const totalRatio = people.reduce((sum, person) => sum + (expense.ratios[person] || 0), 0);
+
+                if (price > 0 && totalRatio > 0) {
+                    people.forEach(person => {
+                        const ratio = expense.ratios[person] || 0;
+                        if (ratio > 0) {
+                            const costPerPerson = price * (ratio / totalRatio);
+                            if (totals[person] !== undefined) {
+                                totals[person] += costPerPerson;
+                            }
+                        }
+                    });
+                }
             });
             
             if (sumOfListedExpenses > totalAmount) {
@@ -395,30 +482,14 @@
                 errorMessage.classList.add('hidden');
             }
 
-            const totals = {};
-            people.forEach(person => totals[person] = 0);
-
             let remainingAmount = totalAmount - sumOfListedExpenses;
             let equalSplitAmount = 0;
             if (people.length > 0 && remainingAmount > 0) {
                 equalSplitAmount = remainingAmount / people.length;
+                people.forEach(person => {
+                    totals[person] += equalSplitAmount;
+                });
             }
-
-            people.forEach(person => {
-                totals[person] += equalSplitAmount;
-            });
-
-            expenses.forEach(expense => {
-                const price = parseFloat(expense.price) || 0;
-                if (price > 0 && expense.participants.length > 0) {
-                    const pricePerPerson = price / expense.participants.length;
-                    expense.participants.forEach(person => {
-                        if (totals[person] !== undefined) {
-                            totals[person] += pricePerPerson;
-                        }
-                    });
-                }
-            });
 
             renderResults(totals);
         }
@@ -460,24 +531,36 @@
 
             const itemizedCosts = expenses.map(expense => {
                 const price = parseFloat(expense.price) || 0;
-                const perPersonCost = expense.participants.length > 0 ? price / expense.participants.length : 0;
+                const totalRatio = people.reduce((sum, person) => sum + (expense.ratios[person] || 0), 0);
                 const costs = {};
                 people.forEach(person => {
-                    costs[person] = expense.participants.includes(person) ? perPersonCost : 0;
+                    if (totalRatio > 0) {
+                        const ratio = expense.ratios[person] || 0;
+                        costs[person] = price * (ratio / totalRatio);
+                    } else {
+                        costs[person] = 0;
+                    }
                 });
                 return {
                     item: expense.item,
                     price: price,
+                    ratios: expense.ratios,
                     costs
                 };
             });
             
             itemizedCosts.forEach(item => {
+                const isDefaultRatio = people.every(person => item.ratios[person] === 1 || item.ratios[person] === 0);
                 tableHTML += `
                     <tr>
                         <td>${item.item || '-'}</td>
                         <td>${item.price.toFixed(2)}</td>
-                        ${people.map(person => `<td class="person-name-cell">${item.costs[person].toFixed(2)}</td>`).join('')}
+                        ${people.map(person => {
+                            const ratio = item.ratios[person] || 0;
+                            const cost = item.costs[person].toFixed(2);
+                            const ratioDisplay = (ratio > 0 && !isDefaultRatio) ? `(${ratio})` : '';
+                            return `<td class="person-name-cell">${cost} ${ratioDisplay}</td>`;
+                        }).join('')}
                     </tr>
                 `;
             });
@@ -532,7 +615,6 @@
             summaryModal.style.display = 'flex';
         }
         
-        // ⭐ ฟังก์ชันดาวน์โหลดที่ปรับปรุงใหม่
         function downloadSummaryImage() {
             const summaryTableContainer = document.getElementById('summary-table-container');
 
@@ -541,15 +623,13 @@
                 return;
             }
 
-            // ⭐ ส่วนการแก้ปัญหาหลัก: ทำให้ overflow เป็น visible ชั่วคราว
             const originalOverflowX = summaryTableContainer.style.overflowX;
             summaryTableContainer.style.overflowX = 'visible';
             
             const tableElement = summaryTableContainer.querySelector('.summary-table');
             const actualWidth = tableElement.scrollWidth;
             
-            // ใช้ความกว้างที่แท้จริงของตาราง + ค่าเผื่อ
-            const targetWidth = actualWidth + 50; 
+            const targetWidth = actualWidth + 100;
             const scale = 2;
 
             html2canvas(summaryTableContainer, {
@@ -566,13 +646,10 @@
                 a.click();
                 document.body.removeChild(a);
 
-                // ⭐ คืนค่า overflowX กลับเป็นค่าเดิม
                 summaryTableContainer.style.overflowX = originalOverflowX;
-
             }).catch(error => {
                 console.error('Failed to capture and download image:', error);
                 alert('เกิดข้อผิดพลาดในการดาวน์โหลดรูปภาพ โปรดลองอีกครั้ง');
-                // ⭐ คืนค่า overflowX กลับเป็นค่าเดิม แม้จะมี error
                 summaryTableContainer.style.overflowX = originalOverflowX;
             });
         }
